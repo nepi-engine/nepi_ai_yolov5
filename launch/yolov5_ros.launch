@@ -14,7 +14,8 @@
   <arg name="config_path"           default="/mnt/nepi_storage/ai_models/yolov5_ros/models/cfg"/>
 
   <!-- network parameter files -->
-  <arg name="network_param_file"         default="/mnt/nepi_storage/ai_models/yolov5_ros/config/common_object_detection_small.yaml"/>
+  <arg name="network_param_path"         default="/mnt/nepi_storage/ai_models/yolov5_ros/config"/>
+  <arg name="network_param_file"         default="common_object_detection_small.yaml"/>
 
   <!-- Input image -->
   <arg name="source_img_topic"                  default="$(arg pub_sub_namespace)/image_raw"/>
@@ -23,12 +24,13 @@
   <arg name="detection_threshold"        default="0.3"/>
 
   <!-- Load parameters -->
-  <rosparam command="load" ns="$(arg pub_sub_namespace)/$(arg node_name)" file="$(arg network_param_file)"/>
+  <rosparam command="load" ns="$(arg pub_sub_namespace)/$(arg node_name)" file="$(arg network_param_path)/$(arg network_param_file)"/>
 
   <!-- Start yolov5 and ros wrapper -->
   <node pkg="$(arg pkg_name)" ns="$(arg pub_sub_namespace)" type="$(arg node_file)" name="$(arg node_name)" output="screen" launch-prefix="$(arg launch_prefix)">
     <param name="pub_sub_namespace"   value="$(arg pub_sub_namespace)" />
     <param name="model_name"          value="$(arg model_name)" />
+    <param name="network_param_path"   value="$(arg network_param_path)" />
     <param name="weights_path"          value="$(arg weights_path)" />
     <param name="config_path"           value="$(arg config_path)" />
     <param name="source_img_topic" value="$(arg source_img_topic)" />

@@ -169,7 +169,9 @@ class Yolov5AIF(object):
             nepi_msg.printMsgWarn("Yolov5: Failed to find configs path: " + config_path)
             return
 
-        network_param_file_path = os.path.join(self.models_folder_path, "configs", classifier + ".yaml")
+        network_param_path = os.path.join(self.models_folder_path, "configs")
+        network_param_file = (classifier + ".yaml")
+        network_param_file_path = os.path.join(network_param_path, network_param_file)
         if os.path.exists(network_param_file_path) == False:
             nepi_msg.printMsgWarn("Yolov5: Failed to find network params file: " + network_param_file_path)
             return
@@ -185,7 +187,8 @@ class Yolov5AIF(object):
             "file_name:=" + self.launch_file,
             "weights_path:=" + weights_path,
             "config_path:=" + config_path,
-            "network_param_file:=" + network_param_file_path,
+            "network_param_path:=" + network_param_path,
+            "network_param_file:=" + network_param_file,
             "source_img_topic:=" + source_img_topic,
             "detector_threshold:=" + str(threshold)
         ]
