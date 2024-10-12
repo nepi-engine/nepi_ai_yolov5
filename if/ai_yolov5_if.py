@@ -11,7 +11,6 @@ import glob
 import subprocess
 import yaml
 import time
-import rospy
 import numpy as np
 
 
@@ -90,15 +89,15 @@ class Yolov5AIF(object):
         classifier_size_list = []
         classifier_classes_list = []
         # Try to obtain the path to Yolov5 models from the system_mgr
-        cfg_path_config_folder = os.path.join(self.models_folder_path, 'configs')
-        nepi_msg.printMsgInfo("Yolov5: Looking for models config files in folder: " + cfg_path_config_folder)
+        configs_path_config_folder = os.path.join(self.models_folder_path, 'configs')
+        nepi_msg.printMsgInfo("ai_yolov5_if: Looking for models config files in folder: " + configs_path_config_folder)
         # Grab the list of all existing yolov5 cfg files
-        if os.path.exists(cfg_path_config_folder) == False:
-            nepi_msg.printMsgInfo("Yolov5: Failed to find models config files in folder: " + cfg_path_config_folder)
+        if os.path.exists(configs_path_config_folder) == False:
+            nepi_msg.printMsgInfo("ai_yolov5_if: Failed to find models config files in folder: " + configs_path_config_folder)
             return models_dict
         else:
-            self.cfg_files = glob.glob(os.path.join(cfg_path_config_folder,'*.yaml'))
-            #nepi_msg.printMsgInfo("Yolov5: Found network config files: " + str(self.cfg_files))
+            self.cfg_files = glob.glob(os.path.join(configs_path_config_folder,'*.yaml'))
+            #nepi_msg.printMsgInfo("ai_yolov5_if: Found network config files: " + str(self.cfg_files))
             # Remove the ros.yaml file -- that one doesn't represent a selectable trained neural net
             for f in self.cfg_files:
                 cfg_dict = dict()
@@ -107,7 +106,7 @@ class Yolov5AIF(object):
                     yaml_stream = open(f, 'r')
                     success = True
                 except Exception as e:
-                    nepi_msg.printMsgWarn("Yolov5: Failed to open yaml file: " + str(e))
+                    nepi_msg.printMsgWarn("ai_yolov5_if: Failed to open yaml file: " + str(e))
                 if success:
                     try:
                         # Validate that it is a proper config file and gather weights file size info for load-time estimates
@@ -115,30 +114,30 @@ class Yolov5AIF(object):
                         classifier_keys = list(cfg_dict.keys())
                         classifier_key = classifier_keys[0]
                     except Exception as e:
-                        nepi_msg.printMsgWarn("Yolov5: Failed load yaml data: " + str(e)) 
+                        nepi_msg.printMsgWarn("ai_yolov5_if: Failed load yaml data: " + str(e)) 
                         success = False 
                 try: 
                     yaml_stream.close()
                 except Exception as e:
-                    nepi_msg.printMsgWarn("Yolov5: Failed close yaml file: " + str(e))
+                    nepi_msg.printMsgWarn("ai_yolov5_if: Failed close yaml file: " + str(e))
                 
                 if success == False:
-                    nepi_msg.printMsgWarn("Yolov5: File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
+                    nepi_msg.printMsgWarn("ai_yolov5_if: File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
                     continue
-                #nepi_msg.printMsgWarn("Yolov5: Import success: " + str(success) + " with cfg_dict " + str(cfg_dict))
+                #nepi_msg.printMsgWarn("ai_yolov5_if: Import success: " + str(success) + " with cfg_dict " + str(cfg_dict))
                 cfg_dict_keys = cfg_dict[classifier_key].keys()
                 if ("cfg_file" not in cfg_dict_keys) or ("weight_file" not in cfg_dict_keys):
-                    nepi_msg.printMsgWarn("Yolov5: File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
+                    nepi_msg.printMsgWarn("ai_yolov5_if: File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
                     continue
 
 
                 classifier_name = os.path.splitext(os.path.basename(f))[0]
-                weight_file = os.path.join(self.models_folder_path, "models", "weights",cfg_dict[classifier_key]["weight_file"]["name"])
+                weight_file = os.path.join(self.models_folder_path, "weights",cfg_dict[classifier_key]["weight_file"]["name"])
                 if not os.path.exists(weight_file):
-                    nepi_msg.printMsgWarn("Yolov5: Classifier " + classifier_name + " specifies non-existent weights file " + weight_file + "... not adding this classifier")
+                    nepi_msg.printMsgWarn("ai_yolov5_if: Classifier " + classifier_name + " specifies non-existent weights file " + weight_file + "... not adding this classifier")
                     continue
                 classifier_classes_list.append(cfg_dict[classifier_key]['detection_classes']['names'])
-                #nepi_msg.printMsgWarn("Yolov5: Classes: " + str(classifier_classes_list))
+                #nepi_msg.printMsgWarn("ai_yolov5_if: Classes: " + str(classifier_classes_list))
                 classifier_name_list.append(classifier_name)
                 classifier_size_list.append(os.path.getsize(weight_file))
             for i,name in enumerate(classifier_name_list):
@@ -155,25 +154,30 @@ class Yolov5AIF(object):
     def startClassifier(self, classifier, source_img_topic, threshold):
         source_img_topic = nepi_ros.find_topic(source_img_topic)
         if source_img_topic == "":
-            nepi_msg.printMsgWarn("Yolov5: Failed to find image topic with str: " + source_img_topic)
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find image topic with str: " + source_img_topic)
             return
 
         # Check for files
-        weights_path = os.path.join(self.models_folder_path, "models/weights")
+        yolov5_path = os.path.join(self.models_folder_path, "yolov5")
+        if os.path.exists(yolov5_path) == False:
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find yolov5 path: " + yolov5_path)
+            return
+
+        # Check for files
+        weights_path = os.path.join(self.models_folder_path, "weights")
         if os.path.exists(weights_path) == False:
-            nepi_msg.printMsgWarn("Yolov5: Failed to find weights path: " + weights_path)
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find weights path: " + weights_path)
             return
 
-        config_path = os.path.join(self.models_folder_path, "models/cfg")
-        if os.path.exists(config_path) == False:
-            nepi_msg.printMsgWarn("Yolov5: Failed to find configs path: " + config_path)
+        configs_path = os.path.join(self.models_folder_path, "configs")
+        if os.path.exists(configs_path) == False:
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find configs path: " + configs_path)
             return
 
-        network_param_path = os.path.join(self.models_folder_path, "configs")
         network_param_file = (classifier + ".yaml")
-        network_param_file_path = os.path.join(network_param_path, network_param_file)
+        network_param_file_path = os.path.join(configs_path, network_param_file)
         if os.path.exists(network_param_file_path) == False:
-            nepi_msg.printMsgWarn("Yolov5: Failed to find network params file: " + network_param_file_path)
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find network params file: " + network_param_file_path)
             return
 
 
@@ -185,14 +189,14 @@ class Yolov5AIF(object):
             "pub_sub_namespace:=" + self.pub_sub_namespace, 
             "node_name:=" + self.launch_node_name,
             "file_name:=" + self.launch_file,
+            "yolov5_path:=" + yolov5_path,
             "weights_path:=" + weights_path,
-            "config_path:=" + config_path,
-            "network_param_path:=" + network_param_path,
+            "configs_path:=" + configs_path,
             "network_param_file:=" + network_param_file,
             "source_img_topic:=" + source_img_topic,
             "detector_threshold:=" + str(threshold)
         ]
-        nepi_msg.printMsgInfo("Yolov5: Launching Yolov5 ROS Process: " + str(launch_cmd_line))
+        nepi_msg.printMsgInfo("ai_yolov5_if: Launching Yolov5 ROS Process: " + str(launch_cmd_line))
         self.ros_process = subprocess.Popen(launch_cmd_line)
         
 
@@ -202,7 +206,7 @@ class Yolov5AIF(object):
 
 
     def stopClassifier(self):
-        nepi_msg.printMsgInfo("Yolov5: Stopping classifier")
+        nepi_msg.printMsgInfo("ai_yolov5_if: Stopping classifier")
         if not (None == self.ros_process):
             self.ros_process.terminate()
             self.ros_process = None
@@ -216,7 +220,7 @@ class Yolov5AIF(object):
 if __name__ == '__main__':
     node_name = TEST_AI_DICT['node_name']
     while nepi_ros.check_for_node(node_name):
-        nepi_msg.printMsgInfo("Yolov5: Trying to kill running node: " + node_name)
+        nepi_msg.printMsgInfo("ai_yolov5_if: Trying to kill running node: " + node_name)
         nepi_ros.kill_node(node_name)
         nepi_ros.sleep(2,10)
     Yolov5AIF(TEST_AI_DICT,TEST_PUB_SUB_NAMESPACE,TEST_MODELS_LIB_PATH, run_test = True)

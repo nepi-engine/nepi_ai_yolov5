@@ -4,6 +4,11 @@ import os
 import sys
 import rospy
 import torch
+import cv2
+import torchvision.transforms as transforms
+import numpy as np
+np.bool = np.bool_
+import pandas
 
 from nepi_edge_sdk_base import nepi_ros
 from nepi_edge_sdk_base import nepi_msg
@@ -46,9 +51,9 @@ class PytorchDetector():
         #nepi_msg.publishMsgInfo(self,"Starting node params: " + str(node_params))
         self.model_name = nepi_ros.get_param(self,"~model_name","")
         self.pub_sub_namespace = nepi_ros.get_param(self,"~pub_sub_namespace",self.node_namespace)
-        self.network_param_path = nepi_ros.get_param(self,"~network_param_path","")
+        self.yolov5_path = nepi_ros.get_param(self,"~yolov5_path","")
         self.weights_path = nepi_ros.get_param(self,"~weights_path","")
-        self.config_path = nepi_ros.get_param(self,"~config_path","")
+        self.configs_path = nepi_ros.get_param(self,"~configs_path","")
         self.source_img_topic = nepi_ros.get_param(self,"~source_img_topic","")
         threshold_str = nepi_ros.get_param(self,"~detector_threshold","0.5")
         try:
@@ -65,45 +70,22 @@ class PytorchDetector():
                 nepi_msg.publishMsgWarn(self,"Failed to get required model info from params: ")
                 rospy.signal_shutdown("Failed to get valid model file paths")
             else:
-                #nepi_msg.publishMsgWarn(self,"Got model info from param server: " + str(model_info))
-                self.weights_file_path = os.path.join(self.weights_path, model_info['weight_file']['name'])
-                self.config_file_path = os.path.join(self.config_path, model_info['cfg_file']['name'])
-                self.classes = model_info['detection_classes']['names']
-
                 # Load the model
                 # Add paths to python
-
-                #sys.path.append(self.config_file_path)
-                #sys.path.append(self.weights_file_path)
-
-                Model = nepi_ais.importAIClass('yolo.py',self.network_param_path,'yolo','Model')
-                model = model = getModel(path_or_model='yolov5s.pt')
-                # Initialize the YOLO model.
-                '''
-                # Update model settings
-                self.model.conf = 0.3  # Confidence threshold (0-1)
-                self.model.iou = 0.45  # NMS IoU threshold (0-1)
-                self.model.max_det = 20  # Maximum number of detections per image
+                #nepi_msg.publishMsgWarn(self,"Got model info from param server: " + str(model_info))
+                #self.appendProjectFolderPaths(self.yolov5_path)
+                self.weight_file_path = os.path.join(self.weights_path, model_info['weight_file']['name'])
+                self.config_file_path = os.path.join(self.configs_path, model_info['cfg_file']['name'])
+                self.classes = model_info['detection_classes']['names']
+                yolo_py_path = os.path.join(self.yolov5_path,'models')
+                sys.path.append(yolo_py_path)
+                # Load the model
+                #YOLO = nepi_ais.importAIClass('yolo.py',yolo_py_path,'yolo','Model')
+                #self.model = YOLO(self.weight_file_path)
+                #self.load_state_dict(torch.load(self.weight_file_path))
+                self.model = torch.hub.load(yolo_py_path,'custom', self.weight_file_path)
                 self.model.eval()
-
-                #  Convert image from ros to cv2
-                cv2_img = nepi_img.rosimg_to_cv2img(source_img_msg)
-                ros_timestamp = img_msg.header.stamp
-
-                #  Run model against image
-                results = self.model(self.img)
-                '''
-
-
-                '''
-                self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                self.model = torch.load('/home/nepi/pytorch_ws/models/yolov5', \
-                                            'custom', \
-                                            source="local", \
-                                            path="/home/nepi/pytorch_ws/models/yolov5/checkpoints/yolov5s.pt" \
-                            ).to(self.device)
-                
-                '''
+   
                 self.ai_if = AiNodeIF(node_name = self.node_name, 
                                     source_img_topic = self.source_img_topic,
                                     pub_sub_namespace = self.pub_sub_namespace,
@@ -119,42 +101,44 @@ class PytorchDetector():
                 #########################################################        
               
 
+    def appendProjectFolderPaths(self,project_path):
+        for entry in os.scandir(path):
+            if entry.is_dir():
+                rospy.logwarn(entry)
+
     def setThreshold(self,threshold):
-        pass              
+        self.threshold = threshold
+             
 
     def processDetection(self,cv2_img):
+        # Convert BGR image to RGB image
+        cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
+        # Define a transform to convert
+        # the image to torch tensor
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+        # Convert the image to Torch tensor
+        tensor = transform(image)
+        # Update model settings
+        self.model.conf = self.threshold  # Confidence threshold (0-1)
+        self.model.iou = 0.45  # NMS IoU threshold (0-1)
+        self.model.max_det = 20  # Maximum number of detections per image
+        # Run the detection model on tensor
+        results = self.model(tensor)
+        nepi_msg.publishMsgInfo(self,"Got Yolo detection results: " + str(results))   
+        
+        results.xyxy[0]  # img predictions (tensor)
+        results_panda = results.pandas().xyxy[0]  # img1 predictions (pandas)
+        nepi_msg.publishMsgInfo(self,"Got Panda formated Yolo detection results: " + str(results_panda))
+        #      xmin    ymin    xmax   ymax  confidence  class    name
+        # 0  749.50   43.50  1148.0  704.5    0.874023      0  person
+        # 1  433.50  433.50   517.5  714.5    0.687988     27     tie
+        # 2  114.75  195.75  1095.0  708.0    0.624512      0  person
+        # 3  986.00  304.00  1028.0  420.0    0.286865     27     tie
+        
+
         return [TEST_DETECTION_DICT_ENTRY]
-
-    def getModel(self,path_or_model='path/to/model.pt', autoshape=True):
-        """custom mode
-
-        Arguments (3 options):
-            path_or_model (str): 'path/to/model.pt'
-            path_or_model (dict): torch.load('path/to/model.pt')
-            path_or_model (nn.Module): torch.load('path/to/model.pt')['model']
-
-        Returns:
-            pytorch model
-        """
-        model = torch.load(path_or_model, map_location=torch.device('cpu')) if isinstance(path_or_model, str) else path_or_model  # load checkpoint
-        if isinstance(model, dict):
-            model = model['ema' if model.get('ema') else 'model']  # load model
-
-        hub_model = Model(model.yaml).to(next(model.parameters()).device)  # create
-        hub_model.load_state_dict(model.float().state_dict())  # load state_dict
-        hub_model.names = model.names  # class names
-        if autoshape:
-            hub_model = hub_model.autoshape()  # for file/URI/PIL/cv2/np inputs and NMS
-        device = select_device('0' if torch.cuda.is_available() else 'cpu')  # default to GPU if available
-        return hub_model.to(device)
-
-        # model = getModel(path_or_model='yolov5s.pt')  # custom example
-        # model = create(name='yolov5s', pretrained=True, channels=3, classes=80, autoshape=True)  # pretrained example
-
-# Verify inference
-import numpy as np
-from PIL import Image
-
 
 
 
