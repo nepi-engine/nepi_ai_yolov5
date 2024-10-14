@@ -111,6 +111,9 @@ class PytorchDetector():
              
 
     def processDetection(self,cv2_img):
+        # Convert BW image to RGB
+        if image.shape[2] != 3:
+            cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_GRAY2BGR)
         # Convert BGR image to RGB image
         cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
         # Define a transform to convert
