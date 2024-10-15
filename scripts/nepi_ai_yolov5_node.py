@@ -77,13 +77,14 @@ class PytorchDetector():
                 self.weight_file_path = os.path.join(self.weights_path, model_info['weight_file']['name'])
                 self.config_file_path = os.path.join(self.configs_path, model_info['cfg_file']['name'])
                 self.classes = model_info['detection_classes']['names']
-                yolo_py_path = os.path.join(self.yolov5_path,'models')
-                sys.path.append(yolo_py_path)
+                #yolo_py_path = os.path.join(self.yolov5_path,'models')
+                #sys.path.append(yolo_py_path)
                 # Load the model
                 #YOLO = nepi_ais.importAIClass('yolo.py',yolo_py_path,'yolo','Model')
                 #self.model = YOLO(self.weight_file_path)
                 #self.load_state_dict(torch.load(self.weight_file_path))
-                self.model = torch.hub.load(yolo_py_path,'custom', self.weight_file_path)
+                raw_yolov5_path = r"{}".format(self.yolov5_path)
+                self.model = torch.hub.load(raw_yolov5_path,'custom', path=self.weight_file_path,source='local')
                 self.model.eval()
    
                 self.ai_if = AiNodeIF(node_name = self.node_name, 
@@ -111,8 +112,9 @@ class PytorchDetector():
              
 
     def processDetection(self,cv2_img):
+        detect_dict_list = [TEST_DETECTION_DICT_ENTRY]
         # Convert BW image to RGB
-        if image.shape[2] != 3:
+        if cv2_img.shape[2] != 3:
             cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_GRAY2BGR)
         # Convert BGR image to RGB image
         cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
@@ -122,26 +124,30 @@ class PytorchDetector():
             transforms.ToTensor()
         ])
         # Convert the image to Torch tensor
-        tensor = transform(image)
+        img_tensor = transform(cv2_img)
+        rospy.logwarn("Img Tensor Shape: " + str(img_tensor.shape))
         # Update model settings
         self.model.conf = self.threshold  # Confidence threshold (0-1)
         self.model.iou = 0.45  # NMS IoU threshold (0-1)
         self.model.max_det = 20  # Maximum number of detections per image
         # Run the detection model on tensor
-        results = self.model(tensor)
-        nepi_msg.publishMsgInfo(self,"Got Yolo detection results: " + str(results))   
-        
-        results.xyxy[0]  # img predictions (tensor)
-        results_panda = results.pandas().xyxy[0]  # img1 predictions (pandas)
-        nepi_msg.publishMsgInfo(self,"Got Panda formated Yolo detection results: " + str(results_panda))
-        #      xmin    ymin    xmax   ymax  confidence  class    name
-        # 0  749.50   43.50  1148.0  704.5    0.874023      0  person
-        # 1  433.50  433.50   517.5  714.5    0.687988     27     tie
-        # 2  114.75  195.75  1095.0  708.0    0.624512      0  person
-        # 3  986.00  304.00  1028.0  420.0    0.286865     27     tie
-        
+        try:
+            results = self.model(img_tensor)
+            nepi_msg.publishMsgInfo(self,"Got Yolo detection results: " + str(results))   
+            
+            results.xyxy[0]  # img predictions (tensor)
+            results_panda = results.pandas().xyxy[0]  # img1 predictions (pandas)
+            nepi_msg.publishMsgInfo(self,"Got Panda formated Yolo detection results: " + str(results_panda))
+            #      xmin    ymin    xmax   ymax  confidence  class    name
+            # 0  749.50   43.50  1148.0  704.5    0.874023      0  person
+            # 1  433.50  433.50   517.5  714.5    0.687988     27     tie
+            # 2  114.75  195.75  1095.0  708.0    0.624512      0  person
+            # 3  986.00  304.00  1028.0  420.0    0.286865     27     tie
+            success = True
+        except Exception as e:
+            nepi_msg.publishMsgInfo(self,"Failed to process img with exception: " + str(e))
 
-        return [TEST_DETECTION_DICT_ENTRY]
+        return detect_dict_list
 
 
 

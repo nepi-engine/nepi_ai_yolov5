@@ -65,6 +65,9 @@ TEST_THRESHOLD = "0.3"
 
 
 class Yolov5AIF(object):
+
+    yolov5_path = '/opt/nepi/ros/share/yolov5'
+
     def __init__(self, ai_dict,pub_sub_namespace,models_lib_path, run_test = False):
       if pub_sub_namespace[-1] == "/":
         pub_sub_namespace = pub_sub_namespace[:-1]
@@ -158,9 +161,8 @@ class Yolov5AIF(object):
             return
 
         # Check for files
-        yolov5_path = os.path.join(self.models_folder_path, "yolov5")
-        if os.path.exists(yolov5_path) == False:
-            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find yolov5 path: " + yolov5_path)
+        if os.path.exists(self.yolov5_path) == False:
+            nepi_msg.printMsgWarn("ai_yolov5_if: Failed to find yolov5 path: " + self.yolov5_path)
             return
 
         # Check for files
@@ -189,7 +191,7 @@ class Yolov5AIF(object):
             "pub_sub_namespace:=" + self.pub_sub_namespace, 
             "node_name:=" + self.launch_node_name,
             "file_name:=" + self.launch_file,
-            "yolov5_path:=" + yolov5_path,
+            "yolov5_path:=" + self.yolov5_path,
             "weights_path:=" + weights_path,
             "configs_path:=" + configs_path,
             "network_param_file:=" + network_param_file,

@@ -10,7 +10,7 @@
   <arg name="pub_sub_namespace" default="/nepi/" />
 
   <!-- Set paths. -->
-  <arg name="yolov5_path"          default="/mnt/nepi_storage/ai_models/yolov5_ros/yolov5"/>
+  <arg name="yolov5_path"          default="/opt/nepi/ros/share/yolov5"/>
   <arg name="weights_path"          default="/mnt/nepi_storage/ai_models/yolov5_ros/weights"/>
   <arg name="configs_path"           default="/mnt/nepi_storage/ai_models/yolov5_ros/configs"/>
 
