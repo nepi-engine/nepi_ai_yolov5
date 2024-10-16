@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import copy
 import sys
 import rospy
 import torch
@@ -20,19 +21,19 @@ from nepi_edge_sdk_base.ai_node_if import AiNodeIF
 # model = ...
 
 TEST_DETECTION_DICT_ENTRY = {
-    'class_name': 'chair', # Class String Name
+    'name': 'TEST_DATA', # Class String Name
     'id': 1, # Class Index from Classes List
     'uid': '', # Reserved for unique tracking by downstream applications
-    'probability': .3, # Probability of detection
-    'box_xmin': 10,
-    'box_ymin': 10,
-    'box_xmax': 100,
-    'box_ymax': 100
+    'prob': .3, # Probability of detection
+    'xmin': 10,
+    'ymin': 10,
+    'xmax': 100,
+    'ymax': 100
 }
 
 
 
-class PytorchDetector():
+class Yolov5Detector():
 
     #######################
     ### Node Initialization
@@ -53,7 +54,6 @@ class PytorchDetector():
         self.pub_sub_namespace = nepi_ros.get_param(self,"~pub_sub_namespace",self.node_namespace)
         self.yolov5_path = nepi_ros.get_param(self,"~yolov5_path","")
         self.weights_path = nepi_ros.get_param(self,"~weights_path","")
-        self.configs_path = nepi_ros.get_param(self,"~configs_path","")
         self.source_img_topic = nepi_ros.get_param(self,"~source_img_topic","")
         threshold_str = nepi_ros.get_param(self,"~detector_threshold","0.5")
         try:
@@ -70,23 +70,28 @@ class PytorchDetector():
                 nepi_msg.publishMsgWarn(self,"Failed to get required model info from params: ")
                 rospy.signal_shutdown("Failed to get valid model file paths")
             else:
-                # Load the model
+
                 # Add paths to python
                 #nepi_msg.publishMsgWarn(self,"Got model info from param server: " + str(model_info))
                 #self.appendProjectFolderPaths(self.yolov5_path)
                 self.weight_file_path = os.path.join(self.weights_path, model_info['weight_file']['name'])
-                self.config_file_path = os.path.join(self.configs_path, model_info['cfg_file']['name'])
                 self.classes = model_info['detection_classes']['names']
+
+
+                # Load the model
+                # Model
+                #self.model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
+                self.raw_yolov5_path = r"{}".format(self.yolov5_path)
+                self.model = torch.hub.load(self.raw_yolov5_path,'custom', path=self.weight_file_path,source='local')
+
+                '''
                 #yolo_py_path = os.path.join(self.yolov5_path,'models')
                 #sys.path.append(yolo_py_path)
                 # Load the model
                 #YOLO = nepi_ais.importAIClass('yolo.py',yolo_py_path,'yolo','Model')
                 #self.model = YOLO(self.weight_file_path)
                 #self.load_state_dict(torch.load(self.weight_file_path))
-                raw_yolov5_path = r"{}".format(self.yolov5_path)
-                self.model = torch.hub.load(raw_yolov5_path,'custom', path=self.weight_file_path,source='local')
-                self.model.eval()
-   
+                '''
                 self.ai_if = AiNodeIF(node_name = self.node_name, 
                                     source_img_topic = self.source_img_topic,
                                     pub_sub_namespace = self.pub_sub_namespace,
@@ -113,43 +118,56 @@ class PytorchDetector():
 
     def processDetection(self,cv2_img):
         detect_dict_list = [TEST_DETECTION_DICT_ENTRY]
+        # Example image
+        #img = 'https://ultralytics.com/images/zidane.jpg'
         # Convert BW image to RGB
         if cv2_img.shape[2] != 3:
             cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_GRAY2BGR)
         # Convert BGR image to RGB image
         cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
-        # Define a transform to convert
-        # the image to torch tensor
-        transform = transforms.Compose([
-            transforms.ToTensor()
-        ])
-        # Convert the image to Torch tensor
-        img_tensor = transform(cv2_img)
-        rospy.logwarn("Img Tensor Shape: " + str(img_tensor.shape))
+        orig_size = cv2_img.shape[:2]
+        #nepi_msg.publishMsgInfo(self,"Original image size: " + str(orig_size))
+
         # Update model settings
         self.model.conf = self.threshold  # Confidence threshold (0-1)
         self.model.iou = 0.45  # NMS IoU threshold (0-1)
         self.model.max_det = 20  # Maximum number of detections per image
+        #self.model.eval()
         # Run the detection model on tensor
+
         try:
-            results = self.model(img_tensor)
-            nepi_msg.publishMsgInfo(self,"Got Yolo detection results: " + str(results))   
-            
-            results.xyxy[0]  # img predictions (tensor)
-            results_panda = results.pandas().xyxy[0]  # img1 predictions (pandas)
-            nepi_msg.publishMsgInfo(self,"Got Panda formated Yolo detection results: " + str(results_panda))
+            # Inference
+            results = self.model(cv2_img)
+            #nepi_msg.publishMsgInfo(self,"Got Yolo detection result: " + str(results))
+            #cv2_out_img = results.image
+            #cv2.imwrite('/mnt/nepi_storage/data/yolov5test.jpg',cv2_out_img)
+            rp = results.pandas().xyxy[0]  # img1 predictions (pandas)
+            #nepi_msg.publishMsgInfo(self,"Got pandas formated results: " + str(rp))
             #      xmin    ymin    xmax   ymax  confidence  class    name
             # 0  749.50   43.50  1148.0  704.5    0.874023      0  person
             # 1  433.50  433.50   517.5  714.5    0.687988     27     tie
             # 2  114.75  195.75  1095.0  708.0    0.624512      0  person
             # 3  986.00  304.00  1028.0  420.0    0.286865     27     tie
-            success = True
         except Exception as e:
             nepi_msg.publishMsgInfo(self,"Failed to process img with exception: " + str(e))
+        detect_dict_list = []
+        for i, name in enumerate(rp['name']):
+            detect_dict = {
+                'name': rp['name'][i], # Class String Name
+                'id': rp['class'][i], # Class Index from Classes List
+                'uid': '', # Reserved for unique tracking by downstream applications
+                'prob': rp['confidence'][i], # Probability of detection
+                'xmin': int(rp['xmin'][i]),
+                'ymin': int(rp['ymin'][i]),
+                'xmax': int(rp['xmax'][i]),
+                'ymax': int(rp['ymax'][i])
+            }
+            detect_dict_list.append(detect_dict)
+            #nepi_msg.publishMsgInfo(self,"Got detect dict entry: " + str(detect_dict))
 
         return detect_dict_list
 
 
 
 if __name__ == '__main__':
-    PytorchDetector()
+    Yolov5Detector()

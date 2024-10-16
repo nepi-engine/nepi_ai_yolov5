@@ -65,6 +65,7 @@ TEST_THRESHOLD = "0.3"
 
 
 class Yolov5AIF(object):
+    TYPICAL_LOAD_TIME = 30
 
     yolov5_path = '/opt/nepi/ros/share/yolov5'
 
@@ -129,7 +130,7 @@ class Yolov5AIF(object):
                     continue
                 #nepi_msg.printMsgWarn("ai_yolov5_if: Import success: " + str(success) + " with cfg_dict " + str(cfg_dict))
                 cfg_dict_keys = cfg_dict[classifier_key].keys()
-                if ("cfg_file" not in cfg_dict_keys) or ("weight_file" not in cfg_dict_keys):
+                if ("weight_file" not in cfg_dict_keys):
                     nepi_msg.printMsgWarn("ai_yolov5_if: File does not appear to be a valid A/I model config file: " + f + "... not adding this classifier")
                     continue
 
@@ -148,6 +149,7 @@ class Yolov5AIF(object):
                 model_dict = dict()
                 model_dict['name'] = name
                 model_dict['size'] = classifier_size_list[i]
+                model_dict['load_time'] = self.TYPICAL_LOAD_TIME
                 model_dict['classes'] = classifier_classes_list[i]
                 models_dict[model_name] = model_dict
             #nepi_msg.printMsgWarn("Classifier returning models dict" + str(models_dict))
