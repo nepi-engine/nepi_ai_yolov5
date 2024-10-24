@@ -149,7 +149,7 @@ class Yolov5AIF(object):
                 model_dict = dict()
                 model_dict['name'] = name
                 model_dict['size'] = classifier_size_list[i]
-                model_dict['load_time'] = self.TYPICAL_LOAD_TIME_PER_MB * classifier_size_list[i]
+                model_dict['load_time'] = self.TYPICAL_LOAD_TIME_PER_MB * classifier_size_list[i] / 1000000
                 model_dict['classes'] = classifier_classes_list[i]
                 models_dict[model_name] = model_dict
             #nepi_msg.printMsgWarn("Classifier returning models dict" + str(models_dict))
