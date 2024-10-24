@@ -125,7 +125,8 @@ class Yolov5Detector():
             cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_GRAY2BGR)
         # Convert BGR image to RGB image
         cv2_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2RGB)
-        orig_size = cv2_img.shape[:2]
+        cv2_img_shape = cv2_img.shape
+        cv2_img_area = cv2_img_shape[0] * cv2_img_shape[1]
         #nepi_msg.publishMsgInfo(self,"Original image size: " + str(orig_size))
 
         # Update model settings
@@ -152,6 +153,8 @@ class Yolov5Detector():
             nepi_msg.publishMsgInfo(self,"Failed to process img with exception: " + str(e))
         detect_dict_list = []
         for i, name in enumerate(rp['name']):
+            detect_box_area = ( int(rp['xmax'][i]) - int(rp['xmin'][i]) ) * ( int(rp['ymax'][i]) - int(rp['ymin'][i]) )
+            detect_box_ratio = detect_box_area / cv2_img_area
             detect_dict = {
                 'name': rp['name'][i], # Class String Name
                 'id': rp['class'][i], # Class Index from Classes List
@@ -160,7 +163,9 @@ class Yolov5Detector():
                 'xmin': int(rp['xmin'][i]),
                 'ymin': int(rp['ymin'][i]),
                 'xmax': int(rp['xmax'][i]),
-                'ymax': int(rp['ymax'][i])
+                'ymax': int(rp['ymax'][i]),
+                'area_pixels': detect_box_area,
+                'area_ratio': detect_box_ratio,
             }
             detect_dict_list.append(detect_dict)
             #nepi_msg.publishMsgInfo(self,"Got detect dict entry: " + str(detect_dict))
